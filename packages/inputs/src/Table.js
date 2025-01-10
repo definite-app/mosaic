@@ -1,5 +1,5 @@
-import { MosaicClient, clausePoints, coordinator, toDataColumns } from '@uwdata/mosaic-core';
-import { Query, column, desc } from '@uwdata/mosaic-sql';
+import { MosaicClient, clausePoints, coordinator, isParam, toDataColumns } from '@uwdata/mosaic-core';
+import { Query, desc } from '@uwdata/mosaic-sql';
 import { formatDate, formatLocaleAuto, formatLocaleNumber } from './util/format.js';
 import { input } from './input.js';
 
@@ -33,9 +33,14 @@ export class Table extends MosaicClient {
     this.align = align;
     this.widths = typeof width === 'object' ? width : {};
 
+    if (isParam(from)) {
+      // if data table is a param, re-initialize upon change
+      from.addEventListener('value', () => this.initialize());
+    }
+
     this.offset = 0;
     this.limit = +rowBatch;
-    this.pending = false;
+    this.isPending = false;
 
     this.selection = as;
     this.currentRow = -1;
@@ -54,15 +59,15 @@ export class Table extends MosaicClient {
 
     let prevScrollTop = -1;
     this.element.addEventListener('scroll', evt => {
-      const { pending, loaded } = this;
+      const { isPending, loaded } = this;
       const { scrollHeight, scrollTop, clientHeight } = evt.target;
 
       const back = scrollTop < prevScrollTop;
       prevScrollTop = scrollTop;
-      if (back || pending || loaded) return;
+      if (back || isPending || loaded) return;
 
       if (scrollHeight - scrollTop < 2 * clientHeight) {
-        this.pending = true;
+        this.isPending = true;
         this.requestData(this.offset + this.limit);
       }
     });
@@ -94,6 +99,10 @@ export class Table extends MosaicClient {
     this.element.appendChild(this.style);
   }
 
+  sourceTable() {
+    return isParam(this.from) ? this.from.value : this.from;
+  }
+
   clause(rows = []) {
     const { data, limit, schema } = this;
     const fields = schema.map(s => s.column);
@@ -116,7 +125,8 @@ export class Table extends MosaicClient {
   }
 
   fields() {
-    return this.columns.map(name => column(this.from, name));
+    const table = this.sourceTable();
+    return this.columns.map(column => ({ column, table }));
   }
 
   fieldInfo(info) {
@@ -148,8 +158,8 @@ export class Table extends MosaicClient {
   }
 
   query(filter = []) {
-    const { from, limit, offset, schema, sortColumn, sortDesc } = this;
-    return Query.from(from)
+    const { limit, offset, schema, sortColumn, sortDesc } = this;
+    return Query.from(this.sourceTable())
       .select(schema.map(s => s.column))
       .where(filter)
       .orderby(sortColumn ? (sortDesc ? desc(sortColumn) : sortColumn) : [])
@@ -158,7 +168,7 @@ export class Table extends MosaicClient {
   }
 
   queryResult(data) {
-    if (!this.pending) {
+    if (!this.isPending) {
       // data is not from an internal request, so reset table
       this.loaded = false;
       this.data = [];
@@ -194,7 +204,7 @@ export class Table extends MosaicClient {
       this.loaded = true;
     }
 
-    this.pending = false;
+    this.isPending = false;
     return this;
   }
 

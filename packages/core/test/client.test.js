@@ -7,10 +7,10 @@ import { QueryResult } from '../src/util/query-result.js';
 describe('MosaicClient', () => {
   it('is filtered by selections', async () => {
     // instantiate coordinator to use node.js DuckDB
-    // disable logging and data cube indexes
+    // disable logging and preaggregation
     const coord = new Coordinator(nodeConnector(), {
       logger: null,
-      indexes: { enabled: false }
+      preagg: { enabled: false }
     });
 
     // load test data
@@ -40,12 +40,12 @@ describe('MosaicClient', () => {
       }
       queryPending() {
         // add result promise to global pending queue
-        this.pending = new QueryResult();
-        pending.push(this.pending);
+        this.pendingResult = new QueryResult();
+        pending.push(this.pendingResult);
       }
       queryResult(data) {
         // fulfill pending promise with sorted data
-        this.pending.fulfill(
+        this.pendingResult.fulfill(
           data.toArray().sort((a, b) => a.key - b.key)
         );
         return this;

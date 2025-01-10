@@ -1,3 +1,5 @@
+import { Coordinator } from './Coordinator.js';
+import { Selection } from './Selection.js';
 import { throttle } from './util/throttle.js';
 
 /**
@@ -11,9 +13,13 @@ export class MosaicClient {
    *  the client when the selection updates.
    */
   constructor(filterSelection) {
+    /** @type {Selection} */
     this._filterBy = filterSelection;
     this._requestUpdate = throttle(() => this.requestQuery(), true);
+    /** @type {Coordinator} */
     this._coordinator = null;
+    /** @type {Promise<any>} */
+    this._pending = Promise.resolve();
   }
 
   /**
@@ -31,6 +37,13 @@ export class MosaicClient {
   }
 
   /**
+   * Return a Promise that resolves once the client has updated.
+   */
+  get pending() {
+    return this._pending;
+  }
+
+  /**
    * Return this client's filter selection.
    */
   get filterBy() {
@@ -38,17 +51,19 @@ export class MosaicClient {
   }
 
   /**
-   * Return a boolean indicating if the client query can be indexed. Should
-   * return true if changes to the filterBy selection does not change the
-   * groupby domain of the client query.
+   * Return a boolean indicating if the client query can be sped up with
+   * materialized views of pre-aggregated data. Should return true if changes to
+   * the filterBy selection does not change the groupby domain of the client
+   * query.
    */
-  get filterIndexable() {
+  get filterStable() {
     return true;
   }
 
   /**
    * Return an array of fields queried by this client.
-   * @returns {object[]|null} The fields to retrieve info for.
+   * @returns {import('./types.js').FieldInfoRequest[] | null}
+   *  The fields to retrieve info for.
    */
   fields() {
     return null;
@@ -56,7 +71,7 @@ export class MosaicClient {
 
   /**
    * Called by the coordinator to set the field info for this client.
-   * @param {*} info The field info result.
+   * @param {import('./types.js').FieldInfo[]} info The field info result.
    * @returns {this}
    */
   fieldInfo(info) { // eslint-disable-line no-unused-vars

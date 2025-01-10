@@ -1,5 +1,6 @@
 import { throttle } from '@uwdata/mosaic-core';
-import { and } from '@uwdata/mosaic-sql';
+import { and, isAggregateExpression } from '@uwdata/mosaic-sql';
+import { getDatum } from './util/get-datum.js';
 import { sanitizeStyles } from './util/sanitize-styles.js';
 
 function configureMark(mark) {
@@ -13,7 +14,7 @@ function configureMark(mark) {
     if (channel === 'orderby') {
       ordered = true;
     } else if (field) {
-      if (field.aggregate) {
+      if (isAggregateExpression(field)) {
         aggregate = true;
       } else {
         if (dims.has(as)) continue;
@@ -49,7 +50,9 @@ export class Highlight {
     this.svg = svg;
     const values = this.values = [];
     const index = this.mark.index;
-    const nodes = this.nodes = svg.querySelectorAll(`[data-index="${index}"] > *`);
+    const g = `g[data-index="${index}"]`;
+    const selector = `${g} > *:not(g), ${g} > g > *`;
+    const nodes = this.nodes = svg.querySelectorAll(selector);
 
     const { channels } = this;
     for (let i = 0; i < nodes.length; ++i) {
@@ -69,8 +72,7 @@ export class Highlight {
     for (let i = 0; i < nodes.length; ++i) {
       const node = nodes[i];
       const base = values[i];
-      const data = node.__data__;
-      const t = test(Array.isArray(data) ? data[0] : data);
+      const t = test(getDatum(node));
       // TODO? handle inherited values / remove attributes
       for (let j = 0; j < channels.length; ++j) {
         const [attr, value] = channels[j];
@@ -93,7 +95,7 @@ async function predicateFunction(mark, selection) {
   const s = { __: and(pred) };
   const q = mark.query(filter);
   (q.queries || [q]).forEach(q => {
-    q.groupby().length ? q.select(s) : q.$select(s);
+    q._groupby.length ? q.select(s) : q.setSelect(s);
   });
 
   const data = await mark.coordinator.query(q);

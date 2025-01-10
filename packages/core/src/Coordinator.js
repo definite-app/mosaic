@@ -1,10 +1,10 @@
 import { socketConnector } from './connectors/socket.js';
-import { DataCubeIndexer } from './DataCubeIndexer.js';
-import { MosaicClient } from './MosaicClient.js';
-import { QueryManager, Priority } from './QueryManager.js';
+import { PreAggregator } from './preagg/PreAggregator.js';
 import { queryFieldInfo } from './util/field-info.js';
 import { QueryResult } from './util/query-result.js';
 import { voidLogger } from './util/void-logger.js';
+import { MosaicClient } from './MosaicClient.js';
+import { QueryManager, Priority } from './QueryManager.js';
 
 /**
  * The singleton Coordinator instance.
@@ -27,21 +27,17 @@ export function coordinator(instance) {
 }
 
 /**
- * @typedef {import('@uwdata/mosaic-sql').Query | string} QueryType
- */
-
-/**
  * A Mosaic Coordinator manages all database communication for clients and
  * handles selection updates. The Coordinator also performs optimizations
- * including query caching, consolidation, and data cube indexing.
+ * including query caching, consolidation, and pre-aggregation.
  * @param {*} [db] Database connector. Defaults to a web socket connection.
  * @param {object} [options] Coordinator options.
  * @param {*} [options.logger=console] The logger to use, defaults to `console`.
  * @param {*} [options.manager] The query manager to use.
  * @param {boolean} [options.cache=true] Boolean flag to enable/disable query caching.
  * @param {boolean} [options.consolidate=true] Boolean flag to enable/disable query consolidation.
- * @param {import('./DataCubeIndexer.js').DataCubeIndexerOptions} [options.indexes]
- *  Data cube indexer options.
+ * @param {import('./preagg/PreAggregator.js').PreAggregateOptions} [options.preagg]
+ *  Options for the Pre-aggregator.
  */
 export class Coordinator {
   constructor(db = socketConnector(), {
@@ -49,7 +45,7 @@ export class Coordinator {
     manager = new QueryManager(),
     cache = true,
     consolidate = true,
-    indexes = {}
+    preagg = {}
   } = {}) {
     /** @type {QueryManager} */
     this.manager = manager;
@@ -58,7 +54,7 @@ export class Coordinator {
     this.databaseConnector(db);
     this.logger(logger);
     this.clear();
-    this.dataCubeIndexer = new DataCubeIndexer(this, indexes);
+    this.preaggregator = new PreAggregator(this, preagg);
   }
 
   /**
@@ -114,13 +110,13 @@ export class Coordinator {
 
   /**
    * Issue a query for which no result (return value) is needed.
-   * @param {QueryType | QueryType[]} query The query or an array of queries.
+   * @param { import('./types.js').QueryType[] |
+   *  import('./types.js').QueryType} query The query or an array of queries.
    *  Each query should be either a Query builder object or a SQL string.
    * @param {object} [options] An options object.
    * @param {number} [options.priority] The query priority, defaults to
    *  `Priority.Normal`.
-   * @returns {QueryResult} A query result
-   *  promise.
+   * @returns {QueryResult} A query result promise.
    */
   exec(query, { priority = Priority.Normal } = {}) {
     query = Array.isArray(query) ? query.filter(x => x).join(';\n') : query;
@@ -130,11 +126,14 @@ export class Coordinator {
   /**
    * Issue a query to the backing database. The submitted query may be
    * consolidate with other queries and its results may be cached.
-   * @param {QueryType} query The query as either a Query builder object
-   *  or a SQL string.
+   * @param {import('./types.js').QueryType} query The query as either a Query
+   *  builder object or a SQL string.
    * @param {object} [options] An options object.
    * @param {'arrow' | 'json'} [options.type] The query result format type.
-   * @param {boolean} [options.cache=true] If true, cache the query result.
+   * @param {boolean} [options.cache=true] If true, cache the query result
+   *  client-side within the QueryManager.
+   * @param {boolean} [options.persist] If true, request the database
+   *  server to persist a cached query server-side.
    * @param {number} [options.priority] The query priority, defaults to
    *  `Priority.Normal`.
    * @returns {QueryResult} A query result promise.
@@ -151,8 +150,8 @@ export class Coordinator {
   /**
    * Issue a query to prefetch data for later use. The query result is cached
    * for efficient future access.
-   * @param {QueryType} query The query as either a Query builder object
-   *  or a SQL string.
+   * @param {import('./types.js').QueryType} query The query as either a Query
+   *  builder object or a SQL string.
    * @param {object} [options] An options object.
    * @param {'arrow' | 'json'} [options.type] The query result format type.
    * @returns {QueryResult} A query result promise.
@@ -191,13 +190,13 @@ export class Coordinator {
    * Update client data by submitting the given query and returning the
    * data (or error) to the client.
    * @param {MosaicClient} client A Mosaic client.
-   * @param {QueryType} query The data query.
+   * @param {import('./types.js').QueryType} query The data query.
    * @param {number} [priority] The query priority.
    * @returns {Promise} A Promise that resolves upon completion of the update.
    */
   updateClient(client, query, priority = Priority.Normal) {
     client.queryPending();
-    return this.query(query, { priority })
+    return client._pending = this.query(query, { priority })
       .then(
         data => client.queryResult(data).update(),
         err => { this._logger.error(err); client.queryError(err); }
@@ -208,12 +207,12 @@ export class Coordinator {
   /**
    * Issue a query request for a client. If the query is null or undefined,
    * the client is simply updated. Otherwise `updateClient` is called. As a
-   * side effect, this method clears the current data cube indexer state.
+   * side effect, this method clears the current preaggregator state.
    * @param {MosaicClient} client The client to update.
-   * @param {QueryType | null} [query] The query to issue.
+   * @param {import('./types.js').QueryType | null} [query] The query to issue.
    */
   requestQuery(client, query) {
-    this.dataCubeIndexer.clear();
+    this.preaggregator.clear();
     return query
       ? this.updateClient(client, query)
       : Promise.resolve(client.update());
@@ -233,7 +232,7 @@ export class Coordinator {
     client.coordinator = this;
 
     // initialize client lifecycle
-    this.initializeClient(client);
+    client._pending = this.initializeClient(client);
 
     // connect filter selection
     connectSelection(this, client.filterBy, client);
@@ -307,10 +306,10 @@ function connectSelection(mc, selection, client) {
  *  selection clause representative of the activation.
  */
 function activateSelection(mc, selection, clause) {
-  const { dataCubeIndexer, filterGroups } = mc;
+  const { preaggregator, filterGroups } = mc;
   const { clients } = filterGroups.get(selection);
   for (const client of clients) {
-    dataCubeIndexer.index(client, selection, clause);
+    preaggregator.request(client, selection, clause);
   }
 }
 
@@ -322,11 +321,11 @@ function activateSelection(mc, selection, clause) {
  * @returns {Promise} A Promise that resolves when the update completes.
  */
 function updateSelection(mc, selection) {
-  const { dataCubeIndexer, filterGroups } = mc;
+  const { preaggregator, filterGroups } = mc;
   const { clients } = filterGroups.get(selection);
   const { active } = selection;
   return Promise.allSettled(Array.from(clients, client => {
-    const info = dataCubeIndexer.index(client, selection, active);
+    const info = preaggregator.request(client, selection, active);
     const filter = info ? null : selection.predicate(client);
 
     // skip due to cross-filtering

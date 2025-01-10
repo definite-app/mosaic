@@ -28,8 +28,8 @@ export const spec : Spec = {
       "y": "unemployment",
       "z": "division",
       "stroke": "steelblue",
-      "curve": "monotone-x",
-      "mixBlendMode": "multiply"
+      "strokeOpacity": 0.9,
+      "curve": "monotone-x"
     },
     {
       "select": "nearestX",
@@ -51,7 +51,7 @@ export const spec : Spec = {
       "y": "unemployment",
       "z": "division",
       "r": 2,
-      "fill": "black",
+      "fill": "currentColor",
       "select": "nearestX"
     },
     {
@@ -62,7 +62,7 @@ export const spec : Spec = {
       "x": "date",
       "y": "unemployment",
       "text": "division",
-      "fill": "black",
+      "fill": "currentColor",
       "dy": -8,
       "select": "nearestX"
     }

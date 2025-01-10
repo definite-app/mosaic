@@ -1,6 +1,6 @@
 {
   "name": "mosaic-widget",
-  "version": "0.11.0",
+  "version": "0.12.2",
   "private": true,
   "license": "BSD-3-Clause",
   "author": "Dominik Moritz (https://www.domoritz.de)",
@@ -14,15 +14,14 @@
     "dev": "npm run build -- --watch",
     "test": "tsc -p jsconfig.json",
     "lint": "eslint src",
-    "prepublishOnly": "rimraf dist && mkdir dist && npm run test && npm run lint && hatch fmt --check && npm run build && hatch build",
-    "publish": "hatch publish --user __token__",
-    "release": "npm run prepublishOnly && npm run publish"
+    "prerelease": "npm run test && npm run lint && uv run ruff check && uv run ruff format --check && npm run build",
+    "release": "uv build && uvx twine upload --skip-existing ../../dist/mosaic_widget*"
   },
   "dependencies": {
-    "@uwdata/mosaic-core": "^0.11.0",
-    "@uwdata/mosaic-spec": "^0.11.0",
-    "@uwdata/vgplot": "^0.11.0",
-    "uuid": "^10.0.0"
+    "@uwdata/mosaic-core": "^0.12.2",
+    "@uwdata/mosaic-spec": "^0.12.2",
+    "@uwdata/vgplot": "^0.12.2",
+    "uuid": "^11.0.3"
   },
   "devDependencies": {
     "anywidget": "^0.9.13"

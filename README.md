@@ -38,7 +38,7 @@ _Note_: For convenience, the `vgplot` package re-exports much of the `mosaic-cor
 
 ### Core Components
 
-- [`mosaic-core`](https://github.com/uwdata/mosaic/tree/main/packages/core): The core Mosaic components. A central coordinator, parameters and selections for linking scalar values or query predicates (respectively) across Mosaic clients, and filter groups with optimized index management. The Mosaic coordinator can send queries either over the network to a backing server (`socket` and `rest` clients) or to a client-side [DuckDB-WASM](https://github.com/duckdb/duckdb-wasm) instance (`wasm` client).
+- [`mosaic-core`](https://github.com/uwdata/mosaic/tree/main/packages/core): The core Mosaic components. A central coordinator, parameters and selections for linking scalar values or query predicates (respectively) across Mosaic clients, and filter groups with materialized views of pre-aggregated data. The Mosaic coordinator can send queries either over the network to a backing server (`socket` and `rest` clients) or to a client-side [DuckDB-WASM](https://github.com/duckdb/duckdb-wasm) instance (`wasm` client).
 - [`mosaic-sql`](https://github.com/uwdata/mosaic/tree/main/packages/sql): An API for convenient construction and analysis of SQL queries. Query objects then coerce to SQL query strings.
 - [`mosaic-inputs`](https://github.com/uwdata/mosaic/tree/main/packages/inputs): Standalone data-driven components such as input menus, text search boxes, and sortable, load-on-scroll data tables.
 - [`mosaic-plot`](https://github.com/uwdata/mosaic/tree/main/packages/plot): An interactive grammar of graphics implemented on top of [Observable Plot](https://github.com/observablehq/plot). Marks (plot layers) serve as individual Mosaic clients. These marks can push data processing (binning, hex binning, regression) and optimizations (such as M4 for line/area charts) down to the database. This package also provides interactors for linked selection, filtering, and highlighting using Mosaic Params and Selections.
@@ -53,6 +53,7 @@ _Note_: For convenience, the `vgplot` package re-exports much of the `mosaic-cor
 ### Miscellaneous
 
 * [`mosaic-duckdb`](https://github.com/uwdata/mosaic/tree/main/packages/duckdb): A Promise-based Node.js API to DuckDB, along with a data server that supports transfer of [Apache Arrow](https://arrow.apache.org/) and JSON data over either Web Sockets or HTTP. Due to persistent quality issues involving the Node.js DuckDB client and Arrow extension, we recommend using the Python-based `duckdb-server` package instead. However, we retain this package for both backwards compatibility and potential future use as quality issues improve.
+* [`duckdb-server-rust`](https://github.com/uwdata/mosaic/tree/main/packages/duckdb-server-rust): A Rust-based server similar to `duckdb-server` (Python) and `mosaic-duckdb` (Node.js) with additional support for HTTP/2. We are still evaluating what server component works best. DuckDB support for Rust is often delayed compared to Python.
 * [`vega-example`](https://github.com/uwdata/mosaic/tree/main/packages/vega-example): A proof-of-concept example integrating Vega-Lite with Mosaic for data management and cross-view linking.
 
 ## Build and Usage Instructions
@@ -63,6 +64,7 @@ To build and develop Mosaic locally:
 * Run `npm i` to install dependencies.
 * Run `npm test` to run the test suite.
 * Run `npm run build` to build client-side bundles.
+* Run `uv build --all-packages` to build the Python packages.
 
 To run local interactive examples:
 
@@ -70,7 +72,7 @@ To run local interactive examples:
 
 To launch a local DuckDB server:
 
-* Install [hatch](https://hatch.pypa.io/latest/install/), if not already present.
+* Install [uv](https://docs.astral.sh/uv/), if not already present.
 * Run `npm run server` to launch the [`duckdb-server`](https://github.com/uwdata/mosaic/tree/main/packages/duckdb-server). This runs the server in development mode, so the server will restart if you change its code.
 
 To use Mosaic with DuckDB Python in Jupyter Notebooks:

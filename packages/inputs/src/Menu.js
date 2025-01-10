@@ -39,14 +39,14 @@ export class Menu extends MosaicClient {
   constructor({
     element,
     filterBy,
+    as,
     from,
     column,
     label = column,
     format = x => x, // TODO
     options,
     value,
-    field = column,
-    as
+    field = column
   } = {}) {
     super(filterBy);
     this.from = from;
@@ -68,8 +68,8 @@ export class Menu extends MosaicClient {
 
     // if provided, populate menu options
     if (options) {
-      this.data = options.map(value => isObject(value) ? value : { value });
-      this.selectedValue(value ?? '');
+      this.data = options.map(opt => isObject(opt) ? opt : { value: opt });
+      this.selectedValue(value === undefined ? '' : value);
       this.update();
     }
 
@@ -96,6 +96,12 @@ export class Menu extends MosaicClient {
             this.selectedValue(value);
           }
         });
+      } else {
+        // trigger selection activation
+        this.select.addEventListener('pointerenter', evt => {
+          if (!evt.buttons) this.activate();
+        });
+        this.select.addEventListener('focus', () => this.activate());
       }
     }
   }
@@ -116,6 +122,11 @@ export class Menu extends MosaicClient {
 
   reset() {
     this.select.selectedIndex = this.from ? 0 : -1;
+  }
+
+  activate() {
+    // @ts-ignore - activate is only called for a Selection
+    this.selection.activate(clausePoint(this.field, 0, { source: this }));
   }
 
   publish(value) {
@@ -163,7 +174,7 @@ export class Menu extends MosaicClient {
       const value = isSelection(selection)
         ? selection.valueFor(this)
         : selection.value;
-      this.selectedValue(value ?? '');
+      this.selectedValue(value === undefined ? '' : value);
     }
 
     return this;

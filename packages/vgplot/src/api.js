@@ -11,13 +11,13 @@ export {
 
 export {
   Query,
-  agg,
   sql,
   column,
   literal,
   cast,
-  castDouble,
-  castInteger,
+  float32,
+  float64,
+  int32,
   argmax,
   argmin,
   arrayAgg,
@@ -61,7 +61,7 @@ export {
   isDistinct, isNotDistinct,
   isNull, isNotNull,
   centroid, centroidX, centroidY, geojson,
-  create, loadExtension,
+  createTable, createSchema, loadExtension,
   loadCSV, loadJSON, loadObjects, loadParquet, loadSpatial
 } from '@uwdata/mosaic-sql';
 
@@ -99,8 +99,10 @@ export {
   axis,
   inset,
   grid,
-  label,
+  clip,
   padding,
+  ariaLabel,
+  ariaDescription,
   xScale,
   xDomain,
   xRange,
@@ -325,7 +327,8 @@ export {
   frame,
   axisX, axisY, axisFx, axisFy,
   gridX, gridY, gridFx, gridFy,
-  geo, sphere, graticule
+  geo, sphere, graticule,
+  waffleX, waffleY
 } from './plot/marks.js';
 
 export {
@@ -336,17 +339,18 @@ export {
   nearest,
   nearestX,
   nearestY,
-  toggle,
-  toggleX,
-  toggleY,
-  toggleZ,
-  toggleColor,
   pan,
   panX,
   panY,
   panZoom,
   panZoomX,
-  panZoomY
+  panZoomY,
+  region,
+  toggle,
+  toggleX,
+  toggleY,
+  toggleZ,
+  toggleColor
 } from './plot/interactors.js';
 
 export {

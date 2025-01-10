@@ -1,7 +1,4 @@
-import {
-  SQLExpression, and, contains, isBetween, isNotDistinct, literal,
-  or, prefix, regexp_matches, suffix
-} from '@uwdata/mosaic-sql';
+import { ExprNode, and, contains, isBetween, isIn, isNotDistinct, literal, or, prefix, regexp_matches, suffix } from '@uwdata/mosaic-sql';
 import { MosaicClient } from './MosaicClient.js';
 
 /**
@@ -10,12 +7,11 @@ import { MosaicClient } from './MosaicClient.js';
  * @typedef {import('./util/selection-types.js').Extent} Extent
  * @typedef {import('./util/selection-types.js').MatchMethod} MatchMethod
  * @typedef {import('./util/selection-types.js').BinMethod} BinMethod
- * @typedef {SQLExpression | string} Field
  */
 
 /**
  * Generate a selection clause for a single selected point value.
- * @param {Field} field The table column or expression to select.
+ * @param {import('@uwdata/mosaic-sql').ExprValue} field The table column or expression to select.
  * @param {*} value The selected value.
  * @param {object} options Additional clause properties.
  * @param {*} options.source The source component generating this clause.
@@ -28,9 +24,9 @@ export function clausePoint(field, value, {
   source,
   clients = source ? new Set([source]) : undefined
 }) {
-  /** @type {SQLExpression | null} */
+  /** @type {ExprNode | null} */
   const predicate = value !== undefined
-    ? isNotDistinct(field, literal(value))
+    ? isIn(field, [literal(value)])
     : null;
   return {
     meta: { type: 'point' },
@@ -43,9 +39,9 @@ export function clausePoint(field, value, {
 
 /**
  * Generate a selection clause for multiple selected point values.
- * @param {Field[]} fields The table columns or expressions to select.
- * @param {any[][]} value The selected values, as an array of arrays where
- *  each subarray contains values corresponding to each *fields* entry.
+ * @param {import('@uwdata/mosaic-sql').ExprValue[]} fields The table columns or expressions to select.
+ * @param {any[][] | null | undefined} value The selected values, as an array of
+ *  arrays. Each subarray contains values for each *fields* entry.
  * @param {object} options Additional clause properties.
  * @param {*} options.source The source component generating this clause.
  * @param {Set<MosaicClient>} [options.clients] The Mosaic clients associated
@@ -57,14 +53,15 @@ export function clausePoints(fields, value, {
   source,
   clients = source ? new Set([source]) : undefined
 }) {
-  /** @type {SQLExpression | null} */
+  /** @type {ExprNode | null} */
   let predicate = null;
   if (value) {
-    const clauses = value.map(vals => {
-      const list = vals.map((v, i) => isNotDistinct(fields[i], literal(v)));
-      return list.length > 1 ? and(list) : list[0];
-    });
-    predicate = clauses.length > 1 ? or(clauses) : clauses[0];
+    const clauses = value.length && fields.length === 1
+      ? [isIn(fields[0], value.map(v => literal(v[0])))]
+      : value.map(v => and(v.map((_, i) => isNotDistinct(fields[i], literal(_)))));
+    predicate = value.length === 0 ? literal(false)
+      : clauses.length > 1 ? or(clauses)
+      : clauses[0];
   }
   return {
     meta: { type: 'point' },
@@ -77,8 +74,8 @@ export function clausePoints(fields, value, {
 
 /**
  * Generate a selection clause for a selected 1D interval.
- * @param {Field} field The table column or expression to select.
- * @param {Extent} value The selected interval as a [lo, hi] array.
+ * @param {import('@uwdata/mosaic-sql').ExprValue} field The table column or expression to select.
+ * @param {Extent | null | undefined} value The selected interval as a [lo, hi] array.
  * @param {object} options Additional clause properties.
  * @param {*} options.source The source component generating this clause.
  * @param {Set<MosaicClient>} [options.clients] The Mosaic clients associated
@@ -96,7 +93,6 @@ export function clauseInterval(field, value, {
   scale,
   pixelSize = 1
 }) {
-  /** @type {SQLExpression | null} */
   const predicate = value != null ? isBetween(field, value) : null;
   /** @type {import('./util/selection-types.js').IntervalMetadata} */
   const meta = { type: 'interval', scales: scale && [scale], bin, pixelSize };
@@ -105,8 +101,8 @@ export function clauseInterval(field, value, {
 
 /**
  * Generate a selection clause for multiple selected intervals.
- * @param {Field[]} fields The table columns or expressions to select.
- * @param {Extent[]} value The selected intervals, as an array of extents.
+ * @param {import('@uwdata/mosaic-sql').ExprValue[]} fields The table columns or expressions to select.
+ * @param {Extent[] | null | undefined} value The selected intervals, as an array of extents.
  * @param {object} options Additional clause properties.
  * @param {*} options.source The source component generating this clause.
  * @param {Set<MosaicClient>} [options.clients] The Mosaic clients associated
@@ -125,7 +121,6 @@ export function clauseIntervals(fields, value, {
   scales = [],
   pixelSize = 1
 }) {
-  /** @type {SQLExpression | null} */
   const predicate = value != null
     ? and(fields.map((f, i) => isBetween(f, value[i])))
     : null;
@@ -138,8 +133,8 @@ const MATCH_METHODS = { contains, prefix, suffix, regexp: regexp_matches };
 
 /**
  * Generate a selection clause for text search matching.
- * @param {Field} field The table column or expression to select.
- * @param {string} value The selected text search query string.
+ * @param {import('@uwdata/mosaic-sql').ExprValue} field The table column or expression to select.
+ * @param {string | null | undefined} value The selected text search query string.
  * @param {object} options Additional clause properties.
  * @param {*} options.source The source component generating this clause.
  * @param {Set<MosaicClient>} [options.clients] The Mosaic clients associated
@@ -153,7 +148,7 @@ export function clauseMatch(field, value, {
   source, clients = undefined, method = 'contains'
 }) {
   let fn = MATCH_METHODS[method];
-  /** @type {SQLExpression | null} */
+  /** @type {ExprNode | null} */
   const predicate = value ? fn(field, literal(value)) : null;
   /** @type {import('./util/selection-types.js').MatchMetadata} */
   const meta = { type: 'match', method };

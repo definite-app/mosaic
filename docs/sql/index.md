@@ -36,56 +36,21 @@ Query
 
 [Query API Reference](/api/sql/queries)
 
-## SQL Expressions
-
-The `sql` template literal builds individual SQL expressions.
-
-``` js
-import { Query, sql } from "@uwdata/mosaic-sql";
-Query
-  .select({ logFoo: sql`log(foo + 1)` })
-  .from("myTable");
-```
-
-Interpolated values may include column references, nested expressions, or params.
-The resulting expression will keep track of referenced columns.
-Expressions that contain a [`Param`](/core/#params) will listen for updates and act like params of their own, including support for `value` event listeners:
-
-``` js
-import { Param } from "@uwdata/core";
-import { column, sql } from "@uwdata/mosaic-sql";
-
-const col = column("foo");
-const param = Param.value(Math.PI);
-const expr = sql`${col} * ${param}`;
-
-expr.addEventListener("value", v => console.log("Update!", v));
-param.update(Math.E); // --> expr will invoke value listeners
-```
-
-The `agg` template literal is similar to `sql`, but additionally flags the result as an aggregate expression.
-This annotation can guide query construction and analysis.
-
-``` js
-import { Query, agg, column } from "@uwdata/mosaic-sql";
-const foo = column("foo");
-const bar = column("bar");
-Query
-  .from("myTable")
-  .select({ hi: agg`GREATEST(MAX(${foo}), MAX(${bar}))` });
-```
-
-[Expression API Reference](/api/sql/expressions)
-
 ## Operators
 
-The Mosaic SQL package includes operators for comparing values:
+The Mosaic SQL package includes operators for manipulating and comparing values:
 
 - Logical operators: `and`, `or`, `not`
 - Comparison operators: `eq`, `neq`, `lt`, `gt`, `lte`, `gte`
 - Range operators: `isBetween`, `isNotBetween`
+- Set operators: `isIn`
 - Null checks: `isNull`, `isNotNull`
 - Null-sensitive comparison: `isDistinct`, `isNotDistinct`
+- Arithmetic operators: `add`, `sub`, `mul`, `div`, `idiv`, `mod`, `pow`
+- Bitwise operators: `bitNot`, `bitAnd`, `bitOr`, `bitLeft`, `bitRight`
+- Conditionals: `cond`
+
+When given a string input, an operator function interprets it as a column name.
 
 For example, to create a simple range query:
 
@@ -101,7 +66,7 @@ Query
 
 ## Aggregate Functions
 
-DuckDB-supported [aggregate functions](https://duckdb.org/docs/sql/aggregates.html), including `min`, `max`, `count`, `sum`, `avg`, `stddev`, `median`, `quantile`, `argmax`, and `argmin`.
+DuckDB-supported [aggregate functions](https://duckdb.org/docs/sql/aggregates.html), including `min`, `max`, `count`, `sum`, `avg`, `stddev`, `median`, `quantile`, `argmax`, `argmin`, `corr`, and others.
 
 ``` js
 import { Query, max, min, quantile } from "@uwdata/mosaic-sql";
@@ -136,6 +101,34 @@ Query.select({
 
 [Window Functions API Reference](/api/sql/window-functions)
 
+## SQL Expressions
+
+When deeper analysis is not needed, the `sql` template literal can be used to build individual SQL expressions using custom text.
+
+``` js
+import { Query, sql } from "@uwdata/mosaic-sql";
+Query
+  .select({ logFoo: sql`log(foo + 1)` })
+  .from("myTable");
+```
+
+Interpolated values may include column references, nested expressions, or params.
+Referenced columns or params can later be extracted using SQL expression visitors.
+
+``` js
+import { Param } from "@uwdata/core";
+import { collectColumns, collectParams, column, sql } from "@uwdata/mosaic-sql";
+
+const col = column("foo");
+const param = Param.value(Math.PI);
+const expr = sql`${col} * ${param}`;
+
+const cols = collectColumns(expr); // -> [ col ]
+const params = collectParams(expr): // -> [ param ]
+```
+
+[Expression API Reference](/api/sql/expressions)
+
 ## Data Loading
 
 Data loading helpers generate query strings for loading data from external CSV, JSON, or Parquet files: `loadCSV`, `loadJSON`, `loadParquet`.
@@ -144,13 +137,13 @@ Data loading helpers generate query strings for loading data from external CSV, 
 import { loadCSV, loadParquet } from "@uwdata/mosaic-sql";
 
 // Loads file.csv into the table "table1" with default options:
-// CREATE TEMP TABLE IF NOT EXISTS table1 AS
+// CREATE TABLE IF NOT EXISTS table1 AS
 //   SELECT *
 //   FROM read_csv('file.csv', auto_detect=true, sample_size=-1)
 const q1 = loadCSV("table1", "file.csv");
 
 // Load named columns from a parquet file, filtered upon load:
-// CREATE TEMP TABLE IF NOT EXISTS table2 AS
+// CREATE TABLE IF NOT EXISTS table2 AS
 //   SELECT foo, bar, value
 //   FROM read_parquet('file.parquet')
 //   WHERE value > 1
@@ -165,7 +158,7 @@ Meanwhile, the `loadObjects` method takes an array of JavaScript objects and gen
 ``` js
 import { loadObjects } from "@uwdata/mosaic-sql";
 
-// CREATE TEMP TABLE IF NOT EXISTS table3 AS
+// CREATE TABLE IF NOT EXISTS table3 AS
 //   (SELECT 1 AS "foo", 2 AS "bar") UNION ALL
 //   (SELECT 3 AS "foo", 4 AS "bar") UNION ALL ...
 const q = loadObjects("table3", [
